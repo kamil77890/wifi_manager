@@ -1,0 +1,8 @@
+{
+  "theme": "dark",
+  "auto_scan": true,
+  "auto_connect": true,
+  "scan_interval": 30,
+  "notifications": true,
+  "saved_networks": {}
+}
