@@ -14,19 +14,19 @@ class WifiManagerApp:
         self.config = ConfigManager()
         self.network_manager = NetworkManager(self.config)
         self.setup_app()
-        
+
     def setup_app(self):
         self.app.setStyleSheet(UnifiedStyles.get_stylesheet())
-        
+
         self.app.setApplicationName("Wi-Fi Manager")
         self.app.setApplicationVersion("1.0.0")
         self.app.setQuitOnLastWindowClosed(False)
-        
+
         self.main_window = ModernWifiWindow(self.network_manager, self.config)
-        
+
         if self.config.get('auto_scan', True):
             QTimer.singleShot(1000, self.main_window.trigger_initial_scan)
-        
+
     def run(self):
         self.main_window.show()
         return self.app.exec_()
