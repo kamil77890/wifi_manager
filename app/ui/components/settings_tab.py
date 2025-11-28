@@ -1,340 +1,225 @@
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
-
 class SettingsTab(QWidget):
+    # Sygnał informujący główne okno o zmianie, żeby np. zaktualizować timer skanowania
+    settings_changed = pyqtSignal(dict)
+
     def __init__(self, config, network_manager=None):
         super().__init__()
         self.config = config
         self.network_manager = network_manager
         self.init_ui()
-    
+        
+        # WAŻNE: Wczytaj ustawienia z pliku przy starcie
+        self.load_current_settings()
+
     def init_ui(self):
-        main_layout = QHBoxLayout(self)
-        main_layout.setSpacing(0)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
         
-        # Sidebar
-        sidebar = QWidget()
-        sidebar.setFixedWidth(250)
-        sidebar.setObjectName("sidebar")
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setSpacing(0)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        # Tytuł
+        title = QLabel("Settings")
+        title.setObjectName("settings_title")
+        title.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: 700;
+                color: #10b981;
+                background: transparent;
+            }
+        """)
+        layout.addWidget(title)
         
-        # Sidebar header
-        sidebar_header = QWidget()
-        sidebar_header.setFixedHeight(120)
-        sidebar_header.setObjectName("sidebar_header")
-        sidebar_header_layout = QVBoxLayout(sidebar_header)
-        sidebar_header_layout.setContentsMargins(20, 20, 20, 20)
+        # --- Sekcja General ---
+        self.general_group = self.create_group("General")
         
-        app_title = QLabel("Wi-Fi Manager")
-        app_title.setObjectName("app_title")
+        self.auto_start_cb = self.create_checkbox("Start with system")
+        self.minimize_tray_cb = self.create_checkbox("Minimize to tray")
         
-        app_subtitle = QLabel("Professional Wireless Network Management")
-        app_subtitle.setObjectName("app_subtitle")
+        self.general_group.layout().addWidget(self.auto_start_cb)
+        self.general_group.layout().addWidget(self.minimize_tray_cb)
+        layout.addWidget(self.general_group)
         
-        sidebar_header_layout.addWidget(app_title)
-        sidebar_header_layout.addWidget(app_subtitle)
-        sidebar_header_layout.addStretch()
-        
-        sidebar_layout.addWidget(sidebar_header)
-        
-        # Sidebar menu
-        sidebar_menu = QWidget()
-        sidebar_menu_layout = QVBoxLayout(sidebar_menu)
-        sidebar_menu_layout.setSpacing(5)
-        sidebar_menu_layout.setContentsMargins(10, 20, 10, 20)
-        
-        self.general_btn = QPushButton("📱 General")
-        self.appearance_btn = QPushButton("🎨 Appearance")
-        self.connections_btn = QPushButton("🔗 Connections")
-        self.networks_btn = QPushButton("📶 Saved Networks")
-        
-        # Style menu buttons
-        menu_buttons = [self.general_btn, self.appearance_btn, self.connections_btn, self.networks_btn]
-        for btn in menu_buttons:
-            btn.setFixedHeight(45)
-            btn.setCheckable(True)
-        
-        self.general_btn.setChecked(True)
-        
-        sidebar_menu_layout.addWidget(self.general_btn)
-        sidebar_menu_layout.addWidget(self.appearance_btn)
-        sidebar_menu_layout.addWidget(self.connections_btn)
-        sidebar_menu_layout.addWidget(self.networks_btn)
-        sidebar_menu_layout.addStretch()
-        
-        sidebar_layout.addWidget(sidebar_menu)
-        
-        # Content area
-        content_area = QWidget()
-        content_area.setObjectName("content_area")
-        content_layout = QVBoxLayout(content_area)
-        content_layout.setSpacing(0)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Content header
-        content_header = QWidget()
-        content_header.setFixedHeight(80)
-        content_header.setObjectName("content_header")
-        content_header_layout = QHBoxLayout(content_header)
-        content_header_layout.setContentsMargins(30, 0, 30, 0)
-        
-        self.content_title = QLabel("General Settings")
-        self.content_title.setObjectName("content_title")
-        
-        content_header_layout.addWidget(self.content_title)
-        content_header_layout.addStretch()
-        
-        content_layout.addWidget(content_header)
-        
-        # Content scroll area
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setSpacing(25)
-        scroll_layout.setContentsMargins(30, 30, 30, 30)
-        
-        # General Settings Section
-        self.general_section = self.create_general_section()
-        scroll_layout.addWidget(self.general_section)
-        
-        # Appearance Section (initially hidden)
-        self.appearance_section = self.create_appearance_section()
-        self.appearance_section.setVisible(False)
-        scroll_layout.addWidget(self.appearance_section)
-        
-        # Connections Section (initially hidden)
-        self.connections_section = self.create_connections_section()
-        self.connections_section.setVisible(False)
-        scroll_layout.addWidget(self.connections_section)
-        
-        # Saved Networks Section (initially hidden)
-        self.networks_section = self.create_networks_section()
-        self.networks_section.setVisible(False)
-        scroll_layout.addWidget(self.networks_section)
-        
-        scroll_layout.addStretch()
-        
-        scroll_area.setWidget(scroll_content)
-        content_layout.addWidget(scroll_area)
-        
-        main_layout.addWidget(sidebar)
-        main_layout.addWidget(content_area)
-        
-        # Connect menu buttons
-        self.general_btn.clicked.connect(lambda: self.show_section("general"))
-        self.appearance_btn.clicked.connect(lambda: self.show_section("appearance"))
-        self.connections_btn.clicked.connect(lambda: self.show_section("connections"))
-        self.networks_btn.clicked.connect(lambda: self.show_section("networks"))
-    
-    def create_general_section(self):
-        section = QWidget()
-        layout = QVBoxLayout(section)
-        layout.setSpacing(20)
-        
-        # Basic Settings Group
-        basic_group = QGroupBox("Basic Settings")
-        basic_group.setObjectName("settings_group")
-        basic_layout = QVBoxLayout(basic_group)
-        basic_layout.setSpacing(15)
-        
-        # Auto-start
-        auto_start_layout = QHBoxLayout()
-        auto_start_label = QLabel("Start with system:")
-        auto_start_label.setObjectName("setting_label")
-        self.auto_start_cb = QCheckBox()
-        self.auto_start_cb.setChecked(True)
-        auto_start_layout.addWidget(auto_start_label)
-        auto_start_layout.addStretch()
-        auto_start_layout.addWidget(self.auto_start_cb)
-        basic_layout.addLayout(auto_start_layout)
-        
-        # Minimize to tray
-        minimize_layout = QHBoxLayout()
-        minimize_label = QLabel("Minimize to system tray:")
-        minimize_label.setObjectName("setting_label")
-        self.minimize_cb = QCheckBox()
-        self.minimize_cb.setChecked(True)
-        minimize_layout.addWidget(minimize_label)
-        minimize_layout.addStretch()
-        minimize_layout.addWidget(self.minimize_cb)
-        basic_layout.addLayout(minimize_layout)
-        
-        layout.addWidget(basic_group)
-        
-        # Apply button
-        apply_btn = QPushButton("Apply Settings")
-        apply_btn.setFixedHeight(45)
-        layout.addWidget(apply_btn)
-        
-        return section
-    
-    def create_appearance_section(self):
-        section = QWidget()
-        layout = QVBoxLayout(section)
-        layout.setSpacing(20)
-        
-        # Theme Settings
-        theme_group = QGroupBox("Appearance Settings")
-        theme_group.setObjectName("settings_group")
-        theme_layout = QVBoxLayout(theme_group)
-        theme_layout.setSpacing(15)
-        
-        # Theme selection
-        theme_select_layout = QHBoxLayout()
+        # --- Sekcja Appearance ---
+        self.app_group = self.create_group("Appearance")
+        theme_layout = QHBoxLayout()
         theme_label = QLabel("Theme:")
-        theme_label.setObjectName("setting_label")
+        theme_label.setStyleSheet("color: #e4e4e7; font-size: 11px; font-weight: 600;")
+        
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Dark Mode", "Light Mode", "Auto"])
-        self.theme_combo.setFixedHeight(35)
-        theme_select_layout.addWidget(theme_label)
-        theme_select_layout.addStretch()
-        theme_select_layout.addWidget(self.theme_combo)
-        theme_layout.addLayout(theme_select_layout)
+        self.theme_combo.addItems(["Dark", "Light", "Auto"])
+        self.theme_combo.setStyleSheet(self.get_combo_style())
+        # Zapisz przy zmianie
+        self.theme_combo.currentTextChanged.connect(self.save_settings)
         
-        # Opacity
-        opacity_layout = QHBoxLayout()
-        opacity_label = QLabel("Window opacity:")
-        opacity_label.setObjectName("setting_label")
-        self.opacity_slider = QSlider(Qt.Horizontal)
-        self.opacity_slider.setRange(50, 100)
-        self.opacity_slider.setValue(95)
-        self.opacity_value = QLabel("95%")
-        opacity_layout.addWidget(opacity_label)
-        opacity_layout.addWidget(self.opacity_slider)
-        opacity_layout.addWidget(self.opacity_value)
-        theme_layout.addLayout(opacity_layout)
+        theme_layout.addWidget(theme_label)
+        theme_layout.addWidget(self.theme_combo)
+        theme_layout.addStretch()
+        self.app_group.layout().addLayout(theme_layout)
+        layout.addWidget(self.app_group)
         
-        layout.addWidget(theme_group)
-        return section
-    
-    def create_connections_section(self):
-        section = QWidget()
-        layout = QVBoxLayout(section)
-        layout.setSpacing(20)
+        # --- Sekcja Connection ---
+        self.conn_group = self.create_group("Connection")
         
-        # Connection Settings
-        conn_group = QGroupBox("Connection Settings")
-        conn_group.setObjectName("settings_group")
-        conn_layout = QVBoxLayout(conn_group)
-        conn_layout.setSpacing(15)
+        self.auto_scan_cb = self.create_checkbox("Auto-scan networks")
+        self.auto_connect_cb = self.create_checkbox("Auto-connect to known")
         
-        # Auto-scan
-        auto_scan_layout = QHBoxLayout()
-        auto_scan_label = QLabel("Automatically scan for networks:")
-        auto_scan_label.setObjectName("setting_label")
-        self.auto_scan_cb = QCheckBox()
-        self.auto_scan_cb.setChecked(True)
-        auto_scan_layout.addWidget(auto_scan_label)
-        auto_scan_layout.addStretch()
-        auto_scan_layout.addWidget(self.auto_scan_cb)
-        conn_layout.addLayout(auto_scan_layout)
+        interval_layout = QHBoxLayout()
+        interval_label = QLabel("Scan Interval:")
+        interval_label.setStyleSheet("color: #e4e4e7; font-size: 11px; font-weight: 600;")
         
-        # Auto-connect
-        auto_connect_layout = QHBoxLayout()
-        auto_connect_label = QLabel("Auto-connect to known networks:")
-        auto_connect_label.setObjectName("setting_label")
-        self.auto_connect_cb = QCheckBox()
-        self.auto_connect_cb.setChecked(True)
-        auto_connect_layout.addWidget(auto_connect_label)
-        auto_connect_layout.addStretch()
-        auto_connect_layout.addWidget(self.auto_connect_cb)
-        conn_layout.addLayout(auto_connect_layout)
-        
-        # Scan interval
-        scan_interval_layout = QHBoxLayout()
-        scan_interval_label = QLabel("Scan interval:")
-        scan_interval_label.setObjectName("setting_label")
         self.scan_interval_combo = QComboBox()
-        self.scan_interval_combo.addItems(["30 seconds", "1 minute", "2 minutes", "5 minutes"])
-        self.scan_interval_combo.setCurrentIndex(1)
-        self.scan_interval_combo.setFixedHeight(35)
-        scan_interval_layout.addWidget(scan_interval_label)
-        scan_interval_layout.addStretch()
-        scan_interval_layout.addWidget(self.scan_interval_combo)
-        conn_layout.addLayout(scan_interval_layout)
+        self.scan_interval_combo.addItems(["5s", "10s", "30s", "1m", "5m"])
+        self.scan_interval_combo.setStyleSheet(self.get_combo_style())
+        # Zapisz przy zmianie
+        self.scan_interval_combo.currentTextChanged.connect(self.save_settings)
         
-        # Notifications
-        notify_layout = QHBoxLayout()
-        notify_label = QLabel("Enable connection notifications:")
-        notify_label.setObjectName("setting_label")
-        self.notify_cb = QCheckBox()
-        self.notify_cb.setChecked(True)
-        notify_layout.addWidget(notify_label)
-        notify_layout.addStretch()
-        notify_layout.addWidget(self.notify_cb)
-        conn_layout.addLayout(notify_layout)
+        interval_layout.addWidget(interval_label)
+        interval_layout.addWidget(self.scan_interval_combo)
+        interval_layout.addStretch()
         
-        layout.addWidget(conn_group)
-        return section
+        self.conn_group.layout().addWidget(self.auto_scan_cb)
+        self.conn_group.layout().addWidget(self.auto_connect_cb)
+        self.conn_group.layout().addLayout(interval_layout)
+        
+        layout.addWidget(self.conn_group)
+        layout.addStretch()
     
-    def create_networks_section(self):
-        section = QWidget()
-        layout = QVBoxLayout(section)
-        layout.setSpacing(20)
-        
-        # Saved Networks
-        networks_group = QGroupBox("Saved Networks")
-        networks_group.setObjectName("settings_group")
-        networks_layout = QVBoxLayout(networks_group)
-        
-        # Networks list
-        self.networks_list = QListWidget()
-        self.networks_list.setFixedHeight(300)
-        
-        # Add sample networks
-        sample_networks = ["Home_WiFi", "Office_Network", "Guest_WiFi", "AndroidAP"]
-        for network in sample_networks:
-            item = QListWidgetItem(f"📶 {network}")
-            self.networks_list.addItem(item)
-        
-        networks_layout.addWidget(self.networks_list)
-        
-        # Network buttons
-        network_buttons_layout = QHBoxLayout()
-        
-        forget_btn = QPushButton("Forget Selected")
-        forget_btn.setFixedHeight(35)
-        
-        clear_btn = QPushButton("Clear All")
-        clear_btn.setFixedHeight(35)
-        
-        network_buttons_layout.addWidget(forget_btn)
-        network_buttons_layout.addWidget(clear_btn)
-        
-        networks_layout.addLayout(network_buttons_layout)
-        
-        layout.addWidget(networks_group)
-        return section
+    def create_group(self, title):
+        group = QGroupBox(title)
+        group.setStyleSheet("""
+            QGroupBox {
+                background: rgba(24, 24, 27, 0.65);
+                border: 1.2px solid rgba(16, 185, 129, 0.35);
+                border-radius: 7px;
+                margin-top: 5px;
+                padding: 10px 10px 6px 10px;
+                font-size: 11px;
+                color: #10b981;
+                font-weight: 600;
+            }
+            QGroupBox::title {
+                color: #10b981;
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+                background: transparent;
+            }
+        """)
+        l = QVBoxLayout()
+        l.setSpacing(5)
+        l.setContentsMargins(0, 5, 0, 0)
+        group.setLayout(l)
+        return group
+
+    def create_checkbox(self, text):
+        cb = QCheckBox(text)
+        cb.setStyleSheet("""
+            QCheckBox {
+                color: #e4e4e7;
+                background: transparent;
+                spacing: 8px;
+                font-size: 11px;
+                font-weight: 500;
+                padding: 3px 0px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 1.5px solid rgba(16, 185, 129, 0.5);
+                border-radius: 3px;
+                background: rgba(255, 255, 255, 0.06);
+            }
+            QCheckBox::indicator:checked {
+                background: #10b981;
+                border: 1.5px solid #10b981;
+            }
+            QCheckBox::indicator:hover {
+                border: 1.5px solid rgba(16, 185, 129, 0.8);
+            }
+        """)
+        cb.stateChanged.connect(self.save_settings)
+        return cb
     
-    def show_section(self, section_name):
-        # Hide all sections
-        self.general_section.setVisible(False)
+    def get_combo_style(self):
+        return """
+            QComboBox {
+                background: rgba(255, 255, 255, 0.07);
+                border: 1.2px solid rgba(16, 185, 129, 0.35);
+                border-radius: 5px;
+                padding: 3px 6px;
+                color: #ffffff;
+                font-size: 11px;
+                min-width: 80px;
+            }
+            QComboBox:hover { border: 1.2px solid rgba(16, 185, 129, 0.55); }
+            QComboBox QAbstractItemView {
+                background: #0a0e1a;
+                border: 1px solid #333;
+                selection-background-color: rgba(16, 185, 129, 0.35);
+                color: #e4e4e7;
+            }
+        """
+
+    def load_current_settings(self):
+        """Pobiera dane z ConfigManager i ustawia stan kontrolek UI"""
+        # Blokujemy sygnały, aby ustawianie wartości nie wywołało metody save_settings
+        self.blockSignals(True)
         
-        self.networks_btn.setChecked(False)
+        # Checkboxy (używamy kluczy z Twojego Config Managera)
+        self.auto_start_cb.setChecked(self.config.get('auto_start', False))
+        self.minimize_tray_cb.setChecked(self.config.get('minimize_to_tray', False))
+        self.auto_scan_cb.setChecked(self.config.get('auto_scan', True))
+        self.auto_connect_cb.setChecked(self.config.get('auto_connect', False))
         
-        # Show selected section
-        if section_name == "general":
-            self.general_section.setVisible(True)
-            self.general_btn.setChecked(True)
-            self.content_title.setText("General Settings")
-        elif section_name == "appearance":
-            self.appearance_section.setVisible(True)
-            self.appearance_btn.setChecked(True)
-            self.content_title.setText("Appearance Settings")
-        elif section_name == "connections":
-            self.connections_section.setVisible(True)
-            self.connections_btn.setChecked(True)
-            self.content_title.setText("Connection Settings")
-        elif section_name == "networks":
-            self.networks_section.setVisible(True)
-            self.networks_btn.setChecked(True)
-            self.content_title.setText("Saved Networks")
+        # ComboBox - Theme
+        theme = self.config.get('theme', 'Dark')
+        # Konwersja (np. 'dark' -> 'Dark')
+        theme_idx = self.theme_combo.findText(theme.capitalize())
+        if theme_idx >= 0:
+            self.theme_combo.setCurrentIndex(theme_idx)
+            
+        # ComboBox - Scan Interval
+        # Twój config domyślny ma '60' (int), ale combo ma stringi "5s", "1m".
+        # Musimy to zmapować.
+        interval_val = self.config.get('scan_interval', 60)
+        
+        # Mapa wartości int -> tekst w combo
+        val_map = {5: "5s", 10: "10s", 30: "30s", 60: "1m", 300: "5m"}
+        text_val = val_map.get(interval_val, "1m") # Domyślnie 1m
+        
+        interval_idx = self.scan_interval_combo.findText(text_val)
+        if interval_idx >= 0:
+            self.scan_interval_combo.setCurrentIndex(interval_idx)
+        
+        self.blockSignals(False)
+
+    def save_settings(self):
+        """Pobiera stan z UI i zapisuje przez ConfigManager"""
+        
+        # Parsowanie interwału (Tekst -> Sekundy Int)
+        interval_text = self.scan_interval_combo.currentText()
+        interval_sec = 60
+        if interval_text.endswith('s'):
+            interval_sec = int(interval_text[:-1])
+        elif interval_text.endswith('m'):
+            interval_sec = int(interval_text[:-1]) * 60
+
+        self.config.set('auto_start', self.auto_start_cb.isChecked())
+        self.config.set('minimize_to_tray', self.minimize_tray_cb.isChecked())
+        self.config.set('theme', self.theme_combo.currentText().lower())
+        self.config.set('auto_scan', self.auto_scan_cb.isChecked())
+        self.config.set('auto_connect', self.auto_connect_cb.isChecked())
+        self.config.set('scan_interval', interval_sec)
+        
+        settings_dict = {
+            'auto_start': self.auto_start_cb.isChecked(),
+            'minimize_to_tray': self.minimize_tray_cb.isChecked(),
+            'auto_scan': self.auto_scan_cb.isChecked(),
+            'auto_connect': self.auto_connect_cb.isChecked(),
+            'scan_interval': interval_text # Przekazujemy tekst, bo ModernWifiWindow ma parser tekstu
+        }
+        
+        self.settings_changed.emit(settings_dict)

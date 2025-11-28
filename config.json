@@ -1,11 +1,13 @@
 {
-    "theme": "dark",
+    "theme": "auto",
     "auto_scan": true,
-    "auto_connect": true,
-    "scan_interval": 60,
+    "auto_connect": false,
+    "scan_interval": 5,
     "notifications": true,
     "use_mock_data": false,
     "saved_networks": {
         "Ja": "12klatkA"
-    }
+    },
+    "auto_start": true,
+    "minimize_to_tray": true
 }

@@ -1,231 +1,204 @@
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
-
+import os
 
 class NetworkItem(QFrame):
-    clicked = pyqtSignal(str, bool, int)
-    
-    def __init__(self, ssid, strength, is_secured, is_connected=False):
-        super().__init__()
+    connect_clicked = pyqtSignal(str, str, bool)  # ssid, password, remember
+    network_selected = pyqtSignal(str, bool)      # ssid, is_secured
+
+    def __init__(self, ssid, strength, is_secured, is_connected=False, parent=None):
+        super().__init__(parent)
         self.ssid = ssid
+        self.strength = int(strength)
         self.is_secured = is_secured
         self.is_connected = is_connected
-        self.strength = strength
-        self.init_ui()
-    
-    def init_ui(self):
-        self.setMinimumHeight(70)
-        self.setMaximumHeight(70)
-        self.setCursor(Qt.PointingHandCursor)
-        self.setObjectName("network_item")
         
-        self.setAttribute(Qt.WA_Hover, True)
+        self.init_ui()
+
+    def get_signal_icon_path(self):
+        base_path = os.path.join(os.path.dirname(__file__), '..', '..', 'assets')
+        if self.strength >= 70:
+            icon_name = 'net_icon_3.png'
+        elif self.strength >= 40:
+            icon_name = 'net_icon_2.png'
+        else:
+            icon_name = 'net_icon_1.png'
+        return os.path.normpath(os.path.join(base_path, icon_name))
+
+    def init_ui(self):
+        self.setObjectName("network_item_frame")
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setFixedHeight(60) # Nieco wyższy dla lepszego "oddechu" (whitespace)
+        self.setCursor(Qt.PointingHandCursor)
+
         if self.is_connected:
             self.setProperty("connected", "true")
+
+        self.main_layout = QHBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 2, 0, 2)
+        self.main_layout.setSpacing(0)
         
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(20, 15, 20, 15)
-        layout.setSpacing(15)
+        # Przezroczyste tło dla głównej ramki
+        self.setStyleSheet("background: transparent;")
+
+        # --- KONTENER WEWNĘTRZNY ---
+        self.container = QFrame()
+        self.container.setObjectName("inner_container")
+        self.container_layout = QHBoxLayout(self.container)
+        self.container_layout.setContentsMargins(16, 0, 16, 0)
+        self.container_layout.setSpacing(16) # Większy odstęp między ikoną a tekstem
         
-        dot_label = QLabel()
-        dot_label.setFixedSize(12, 12)
-        dot_label.setPixmap(self.create_signal_dot())
-        dot_label.setToolTip(f"Signal strength: {self.strength}%")
-        layout.addWidget(dot_label)
+        # Szerokość 95%
+        self.container.setFixedWidth(int(self.parent().width() * 0.95) if self.parent() else 330)
+
+        # STYLE MINIMALISTYCZNE
+        self.container.setStyleSheet("""
+            QFrame#inner_container {
+                background-color: transparent;
+                border-radius: 8px;
+                border: none;
+            }
+            /* Hover: Bardzo delikatne rozjaśnienie tła */
+            QFrame#inner_container:hover {
+                background-color: rgba(255, 255, 255, 0.04);
+            }
+            /* Connected: Subtelna zielona nuta */
+            QFrame#inner_container[connected="true"] {
+                background-color: rgba(16, 185, 129, 0.08);
+            }
+        """)
         
-        info_widget = QWidget()
-        info_widget.setStyleSheet("background: transparent;")
-        info_layout = QVBoxLayout(info_widget)
-        info_layout.setSpacing(4)
+        # Jeśli połączony, ustaw property dla stylów
+        if self.is_connected:
+            self.container.setProperty("connected", "true")
+
+        # 1. LEWA STRONA: Ikona sygnału
+        signal_widget = self.create_signal_icon_widget()
+        self.container_layout.addWidget(signal_widget)
+
+        # 2. ŚRODEK: Informacje
+        info_layout = QVBoxLayout()
         info_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Network name - bold and prominent
-        name_label = QLabel(self.ssid)
-        name_label.setObjectName("network_name")
-        name_label.setStyleSheet("""
-            QLabel#network_name {
-                font-size: 16px;
-                font-weight: bold;
-                color: white;
-                background: transparent;
-            }
+        info_layout.setSpacing(2) # Tekst bliżej siebie
+        info_layout.setAlignment(Qt.AlignVCenter)
+
+        # Nazwa sieci (SSID)
+        self.name_label = QLabel(self.ssid)
+        self.name_label.setStyleSheet("""
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 600; 
+            color: #f1f5f9; 
+            font-size: 14px;
         """)
-        info_layout.addWidget(name_label)
+        info_layout.addWidget(self.name_label)
+
+        # Status i ikona kłódki w jednej linii
+        details_layout = QHBoxLayout()
+        details_layout.setSpacing(8)
         
-        # Status text - simple and clean
-        status_label = self.create_status_label()
-        info_layout.addWidget(status_label)
+        self.status_label = QLabel(self.get_status_text())
+        # Kolor szary (Slate-400), mniejszy font
+        self.status_label.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: 400;")
+        details_layout.addWidget(self.status_label)
+
         
-        info_layout.addStretch()
-        layout.addWidget(info_widget, 1)
+
+        details_layout.addStretch()
+        info_layout.addLayout(details_layout)
         
-        # Security icon at the end - simple lock/unlock
-        security_label = QLabel()
-        security_label.setFixedSize(20, 20)
-        security_label.setPixmap(self.create_security_icon())
-        security_label.setToolTip("Secured network" if self.is_secured else "Open network")
-        security_label.setStyleSheet("background: transparent;")
-        layout.addWidget(security_label)
-        
-        # Apply modern styling without any background
-        self.setStyleSheet("""
-            QFrame#network_item {
-                border-radius: 12px;
-                margin: 2px;
-                background: transparent;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            QFrame#network_item[connected="true"] {
-                background: transparent;
-                border: 1px solid rgba(76, 175, 80, 0.4);
-            }
-            QFrame#network_item:hover {
-                background: transparent;
-                border: 1px solid rgba(76, 175, 80, 0.6);
-            }
-        """)
-    
-    def create_signal_dot(self):
-        """Create a colored dot indicating signal strength"""
-        pixmap = QPixmap(12, 12)
-        pixmap.fill(Qt.transparent)
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Determine color based on connection and strength
+        self.container_layout.addLayout(info_layout, 1)
+
+        # 3. PRAWA STRONA: Akcja
+        # Usunięto tło (panel), teraz to po prostu layout
+        self.right_layout = QHBoxLayout()
+        self.right_layout.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.right_layout.setContentsMargins(0,0,0,0)
+
         if self.is_connected:
-            color = QColor("#4CAF50")  # Green for connected
-        elif self.strength > 70:
-            color = QColor("#4CAF50")  # Green for strong
-        elif self.strength > 40:
-            color = QColor("#FF9800")  # Orange for medium
-        else:
-            color = QColor("#F44336")  # Red for weak
-        
-        # Draw solid colored dot
-        painter.setBrush(color)
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(0, 0, 12, 12)
-        
-        painter.end()
-        return pixmap
-    
-    def create_security_icon(self):
-        """Create simple security icon (lock/unlock)"""
-        pixmap = QPixmap(20, 20)
-        pixmap.fill(Qt.transparent)
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        if self.is_secured:
-            # Simple lock icon
-            lock_color = QColor("#FFA726")  # Orange for secured
+            # Minimalistyczny "tick"
+            connected_label = QLabel("Connected")
+            connected_label.setStyleSheet("color: #10b981; font-size: 11px; font-weight: 600;")
+            self.right_layout.addWidget(connected_label)
             
-            # Lock body
-            painter.setPen(QPen(lock_color, 2))
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRoundedRect(5, 8, 10, 7, 2, 2)
-            
-            # Lock shackle
-            painter.drawArc(3, 6, 14, 7, 0, 180 * 16)
-        else:
-            # Simple unlock icon
-            unlock_color = QColor("#4CAF50")  # Green for open
-            
-            # Lock body (open)
-            painter.setPen(QPen(unlock_color, 2))
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRoundedRect(5, 8, 10, 7, 2, 2)
-            
-            # Open shackle
-            painter.drawArc(7, 4, 6, 6, 45 * 16, 180 * 16)
-        
-        painter.end()
-        return pixmap
-    
-    def create_status_label(self):
-        if self.is_connected:
-            text = "Connected"
-            style = """
-                QLabel {
-                    color: #4CAF50;
-                    font-size: 13px;
-                    font-weight: 500;
-                    background: transparent;
-                }
-            """
         elif self.is_secured:
-            text = "Secured"
-            style = """
-                QLabel {
-                    color: #FFA726;
-                    font-size: 13px;
-                    font-weight: 500;
-                    background: transparent;
-                }
-            """
+            # Subtelna strzałka
+            chevron_label = QLabel("›") # Używam znaku "chevron right" zamiast strzałki
+            chevron_label.setStyleSheet("color: #475569; font-size: 24px; font-weight: 300; margin-bottom: 4px;") 
+            # Na hover strzałka robi się zielona (obsłużone w mouseEnter/Leave rodzica lub globalnym CSS)
+            self.chevron_label = chevron_label # referencja
+            self.right_layout.addWidget(chevron_label)
+            
         else:
-            text = "Open"
-            style = """
-                QLabel {
-                    color: #4CAF50;
-                    font-size: 13px;
-                    font-weight: 500;
-                    background: transparent;
+            # Przycisk "Connect" - czysty tekst lub bardzo prosty guzik
+            self.connect_btn = QPushButton("Connect")
+            self.connect_btn.setFixedSize(60, 26)
+            self.connect_btn.setCursor(Qt.PointingHandCursor)
+            self.connect_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    color: #10b981;
+                    border: 1px solid rgba(16, 185, 129, 0.3);
+                    border-radius: 4px;
+                    font-weight: 600;
+                    font-size: 11px;
                 }
-            """
+                QPushButton:hover {
+                    background-color: rgba(16, 185, 129, 0.1);
+                    border: 1px solid #10b981;
+                }
+            """)
+            self.connect_btn.clicked.connect(self.connect_open_network)
+            self.right_layout.addWidget(self.connect_btn)
+
+        self.container_layout.addLayout(self.right_layout)
+
+        # Centrowanie kontenera w głównym layoucie
+        self.main_layout.addStretch()
+        self.main_layout.addWidget(self.container)
+        self.main_layout.addStretch()
+
+    def create_signal_icon_widget(self):
+        icon_label = QLabel()
+        icon_label.setFixedSize(24, 24) # Mniejsza ikona
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_path = self.get_signal_icon_path()
         
-        label = QLabel(text)
-        label.setStyleSheet(style)
-        return label
-    
-    def enterEvent(self, event):
-        """Handle hover enter"""
-        self.setStyleSheet("""
-            QFrame#network_item {
-                border: 1px solid rgba(76, 175, 80, 0.6);
-                border-radius: 12px;
-                background: transparent;
-            }
-            QFrame#network_item[connected="true"] {
-                border: 1px solid rgba(76, 175, 80, 0.6);
-                background: transparent;
-            }
-        """)
-        super().enterEvent(event)
-    
-    def leaveEvent(self, event):
-        """Handle hover leave"""
-        self.setStyleSheet("""
-            QFrame#network_item {
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                background: transparent;
-            }
-            QFrame#network_item[connected="true"] {
-                border: 1px solid rgba(76, 175, 80, 0.4);
-                background: transparent;
-            }
-        """)
-        super().leaveEvent(event)
-    
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path)
+            # Opcjonalnie: Przemaluj ikonę na biały/szary jeśli nie jest kolorowa
+            pixmap = pixmap.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            icon_label.setPixmap(pixmap)
+        else:
+            icon_label.setText("📶")
+            # Bardziej stonowany kolor ikony (nie jaskrawy zielony)
+            icon_label.setStyleSheet("font-size: 18px; color: #cbd5e1;") 
+        return icon_label
+
+    def get_status_text(self):
+        if self.is_connected:
+            return "Current network"
+        strength_text = "Excellent" if self.strength >= 70 else "Good" if self.strength >= 40 else "Weak"
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.animate_click()
-            self.clicked.emit(self.ssid, self.is_secured, self.strength)
+            if self.is_secured:
+                self.network_selected.emit(self.ssid, True)
+            else:
+                self.connect_open_network()
         super().mousePressEvent(event)
-    
-    def animate_click(self):
-        """Simple click animation"""
-        animation = QPropertyAnimation(self, b"geometry")
-        animation.setDuration(100)
-        animation.setKeyValueAt(0, self.geometry())
-        animation.setKeyValueAt(0.3, QRect(
-            self.x() - 1, self.y() - 1,
-            self.width() + 2, self.height() + 2
-        ))
-        animation.setKeyValueAt(1, self.geometry())
-        animation.start(QAbstractAnimation.DeleteWhenStopped)
+        
+    def enterEvent(self, event):
+        if hasattr(self, 'chevron_label'):
+             self.chevron_label.setStyleSheet("color: #10b981; font-size: 24px; font-weight: 300; margin-bottom: 4px;")
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if hasattr(self, 'chevron_label'):
+             self.chevron_label.setStyleSheet("color: #475569; font-size: 24px; font-weight: 300; margin-bottom: 4px;")
+        super().leaveEvent(event)
+
+    def connect_open_network(self):
+        self.connect_clicked.emit(self.ssid, "", False)
+        self.status_label.setText("Connecting...")
+        self.status_label.setStyleSheet("color: #10b981;")
